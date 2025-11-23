@@ -1,0 +1,70 @@
+conda create -n hactnet python=3.9
+conda activate hactnet
+conda install pip
+pip install dgl -f https://data.dgl.ai/wheels/torch-2.2/cu121/repo.html
+pip install torch==2.2.1 torchvision==0.17.1 --index-url https://download.pytorch.org/whl/cu121
+pip install mlflow matplotlib h5py seaborn histocartography opencv-python scikit-image scikit-learn
+
+
+Bug:------------------------------------------
+Traceback (most recent call last):
+  File "code/experiments.py", line 117, in <module>
+    pred_dict, train_conf = predict_train_val(cfg=cfg, 
+  File "code/decompose.py", line 77, in predict_train_val
+    for batch in tqdm(dataloader):
+  File "conda/envs/hactnet/lib/python3.9/site-packages/tqdm/std.py", line 1181, in __iter__
+    for obj in iterable:
+  File "conda/envs/hactnet/lib/python3.9/site-packages/torch/utils/data/dataloader.py", line 631, in __next__
+    data = self._next_data()
+  File "conda/envs/hactnet/lib/python3.9/site-packages/torch/utils/data/dataloader.py", line 675, in _next_data
+    data = self._dataset_fetcher.fetch(index)  # may raise StopIteration
+  File "conda/envs/hactnet/lib/python3.9/site-packages/torch/utils/data/_utils/fetch.py", line 51, in fetch
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+  File "conda/envs/hactnet/lib/python3.9/site-packages/torch/utils/data/_utils/fetch.py", line 51, in <listcomp>
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+  File "code/dataloader.py", line 136, in __getitem__
+    cg = set_graph_on_cuda(cg) if IS_CUDA else cg
+  File "conda/envs/hactnet/lib/python3.9/site-packages/histocartography/utils/graph.py", line 125, in set_graph_on_cuda
+    cuda_graph.ndata[key_graph] = tmp.cuda()
+  File "conda/envs/hactnet/lib/python3.9/site-packages/dgl/view.py", line 99, in __setitem__
+    self._graph._set_n_repr(self._ntid, self._nodes, {key: val})
+  File "conda/envs/hactnet/lib/python3.9/site-packages/dgl/heterograph.py", line 4349, in _set_n_repr
+    raise DGLError(
+dgl._ffi.base.DGLError: Cannot assign node feature "centroid" on device cuda:0 to a graph on device cpu. Call DGLGraph.to() to copy the graph to the same device.
+
+--> solution: 
+    change function set_graph_on_cuda in miniconda3/envs/hactnet/lib/python3.9/site-packages/histocartography/utils/graph.py:
+    def set_graph_on_cuda(graph):
+      cuda_graph = dgl.DGLGraph()
+      cuda_graph.add_nodes(graph.number_of_nodes())
+      cuda_graph.add_edges(graph.edges()[0], graph.edges()[1])
+      cuda_graph = cuda_graph.to('cuda:0')   ####################################### added ############
+      for key_graph, val_graph in graph.ndata.items():
+          tmp = graph.ndata[key_graph].clone()
+          cuda_graph.ndata[key_graph] = tmp.cuda()
+      for key_graph, val_graph in graph.edata.items():
+          cuda_graph.edata[key_graph] = graph.edata[key_graph].clone().cuda()
+      return cuda_graph
+
+Bug:--------------------------------------------------------------------------
+    load_backend(get_preferred_backend())
+  File "conda/envs/hactnet/lib/python3.9/site-packages/dgl/backend/__init__.py", line 51, in load_backend
+    from .._ffi.base import load_tensor_adapter  # imports DGL C library
+  File "conda/envs/hactnet/lib/python3.9/site-packages/dgl/_ffi/base.py", line 50, in <module>
+    _LIB, _LIB_NAME, _DIR_NAME = _load_lib()
+  File "conda/envs/hactnet/lib/python3.9/site-packages/dgl/_ffi/base.py", line 39, in _load_lib
+    lib = ctypes.CDLL(lib_path[0])
+  File "conda/envs/hactnet/lib/python3.9/ctypes/__init__.py", line 374, in __init__
+    self._handle = _dlopen(self._name, mode)
+OSError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.26' not found (required by conda/envs/hactnet/lib/python3.9/site-packages/dgl/libdgl.so)
+--> solution: 
+    module load gcc/11.2.0
+    module load cuda/12.1
+
+Bug:------------------------------------------------------------------------------
+    device: torch.device = torch.device(torch._C._get_default_device()),  # torch.device('cpu'),
+conda/envs/hactnet/lib/python3.9/site-packages/torch/nn/modules/transformer.py:20: UserWarning: Failed to initialize NumPy: _ARRAY_API not found (Triggered internally at ../torch/csrc/utils/tensor_numpy.cpp:84.)
+  device: torch.device = torch.device(torch._C._get_default_device()),  # torch.device('cpu'),
+--> solution: 
+  pip uninstall numpy 
+  pip install "numpy<2"
